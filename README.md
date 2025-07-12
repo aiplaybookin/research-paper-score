@@ -87,19 +87,74 @@ Disable markdown export (JSON only):
 python -m research_scorer.cli score papers/paper.pdf --no-save-markdown --output results.json
 ```
 
-## Library Components
+## Architecture & Flow
 
-### PaperScorer
-Main orchestrator that coordinates the entire scoring pipeline.
+### System Flow Diagram
 
-### PDFProcessor
+```mermaid
+graph TD
+    A[📄 PDF Input] --> B[PDFProcessor]
+    B --> C[Text Extraction]
+    C --> D[Section Detection]
+    D --> E[TextChunker]
+    E --> F[Split Large Chunks]
+    F --> G[Filter Small/Reference Chunks]
+    G --> H[ClaudeScorer]
+    H --> I{Use Context?}
+    I -->|Yes| J[Score with Previous Section Summaries]
+    I -->|No| K[Score Independently]
+    J --> L[Generate Section Summary]
+    K --> L
+    L --> M[Store Summary for Context]
+    M --> N{More Chunks?}
+    N -->|Yes| H
+    N -->|No| O[PaperScorer]
+    O --> P[Calculate Average Score]
+    P --> Q[Generate Results]
+    Q --> R{Save Markdown?}
+    R -->|Yes| S[📊 Detailed Markdown Report]
+    R -->|No| T[📋 JSON Results]
+    S --> U[📁 Results Directory]
+    T --> U
+```
+
+### Processing Pipeline
+
+The Research Paper Scorer follows a systematic pipeline:
+
+1. **📄 PDF Input** → **PDFProcessor**
+   - Extracts raw text using PyMuPDF
+   - Detects research paper sections (Abstract, Introduction, Methods, etc.)
+   - Creates initial text chunks by section
+
+2. **📝 Text Processing** → **TextChunker**
+   - Splits large sections into manageable chunks (<4000 chars)
+   - Filters out reference sections and figure/table heavy content
+   - Maintains section context and metadata
+
+3. **🤖 AI Scoring** → **ClaudeScorer**
+   - Scores each chunk using Claude 3.5 Haiku
+   - Builds contextual memory from previous section summaries
+   - Generates detailed reasoning and section summaries
+
+4. **📊 Results Generation** → **PaperScorer**
+   - Calculates overall paper score from section scores
+   - Creates comprehensive markdown reports with visual elements
+   - Supports batch processing with summary reports
+
+### Core Components
+
+#### PaperScorer (`paper_scorer.py:14`)
+Main orchestrator that coordinates the entire scoring pipeline and manages configuration.
+
+#### PDFProcessor (`pdf_processor.py:11`)
 Extracts text from PDFs and detects research paper sections using pattern matching.
 
-### TextChunker
+#### TextChunker (`text_chunker.py:8`)
 Splits text into manageable chunks, filtering out references and low-content sections.
 
-### ClaudeScorer
-Integrates with Anthropic's Claude API to score text chunks based on research quality criteria.
+#### ClaudeScorer (`claude_scorer.py:11`)
+Integrates with Anthropic's Claude API to score text chunks with contextual awareness.
 
 ## Scoring Criteria
 
