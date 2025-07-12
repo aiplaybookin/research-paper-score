@@ -220,6 +220,15 @@ class PaperScorer:
             content += f"### {i}. {chunk_score.section_name}\n\n"
             content += f"**Score: {chunk_score.score:.1f}/10**\n\n"
             
+            # Add detailed scores breakdown if available
+            if chunk_score.detailed_scores:
+                content += "**Detailed Scores:**\n"
+                content += f"- Clarity and Writing Quality: {chunk_score.detailed_scores.clarity_writing:.1f}/2\n"
+                content += f"- Technical Depth: {chunk_score.detailed_scores.technical_depth:.1f}/2\n"
+                content += f"- Novelty and Originality: {chunk_score.detailed_scores.novelty_originality:.1f}/2\n"
+                content += f"- Methodology Rigor: {chunk_score.detailed_scores.methodology_rigor:.1f}/2\n"
+                content += f"- Evidence and Support: {chunk_score.detailed_scores.evidence_support:.1f}/2\n\n"
+            
             if chunk_score.reasoning:
                 content += f"**Evaluation:**\n{chunk_score.reasoning}\n\n"
             

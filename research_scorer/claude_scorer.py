@@ -5,7 +5,7 @@ import time
 from typing import List, Optional, Dict, Any
 from anthropic import Anthropic
 
-from .models import TextChunk, ChunkScore
+from .models import TextChunk, ChunkScore, DetailedScores
 
 
 class ClaudeScorer:
@@ -47,6 +47,12 @@ Scoring Guidelines:
 
 Provide your response in the following format:
 Score: [numerical score 1-10]
+Detailed Scores:
+- Clarity and Writing Quality: [0-2]
+- Technical Depth: [0-2]
+- Novelty and Originality: [0-2]
+- Methodology Rigor: [0-2]
+- Evidence and Support: [0-2]
 Reasoning: [brief explanation of your scoring rationale]
 Summary: [2-3 sentence summary of the key points covered in this section]"""
 
@@ -82,14 +88,15 @@ Please evaluate this section considering the context from previous sections (if 
             )
             
             response_text = response.content[0].text
-            score, reasoning, summary = self._parse_response_with_summary(response_text)
+            score, reasoning, summary, detailed_scores = self._parse_response_with_detailed_scores(response_text)
             
             return ChunkScore(
                 section_name=chunk.section_name,
                 text=chunk.text,
                 score=score,
                 reasoning=reasoning,
-                metadata={"model": self.model, "response": response_text, "summary": summary}
+                metadata={"model": self.model, "response": response_text, "summary": summary},
+                detailed_scores=detailed_scores
             )
             
         except Exception as e:
@@ -98,7 +105,8 @@ Please evaluate this section considering the context from previous sections (if 
                 text=chunk.text,
                 score=0.0,
                 reasoning=f"Error during scoring: {str(e)}",
-                metadata={"error": str(e), "summary": ""}
+                metadata={"error": str(e), "summary": ""},
+                detailed_scores=DetailedScores()
             )
     
     def score_chunks(self, chunks: List[TextChunk], 
@@ -134,30 +142,67 @@ Please evaluate this section considering the context from previous sections (if 
         return score, reasoning
     
     def _parse_response_with_summary(self, response_text: str) -> tuple[float, str, str]:
-        """Parse Claude's response to extract score, reasoning, and summary."""
+        """Parse Claude's response to extract score, reasoning, and summary (legacy method)."""
+        score, reasoning, summary, _ = self._parse_response_with_detailed_scores(response_text)
+        return score, reasoning, summary
+
+    def _parse_response_with_detailed_scores(self, response_text: str) -> tuple[float, str, str, DetailedScores]:
+        """Parse Claude's response to extract score, reasoning, summary, and detailed scores."""
         try:
+            import re
             lines = response_text.strip().split('\n')
             score = 0.0
             reasoning = ""
             summary = ""
+            detailed_scores = DetailedScores()
             
             # Parse structured response
             current_section = None
             current_content = []
+            in_detailed_scores = False
             
             for line in lines:
                 line = line.strip()
                 
                 if line.lower().startswith('score:'):
                     score_text = line.split(':', 1)[1].strip()
-                    import re
                     score_match = re.search(r'(\d+(?:\.\d+)?)', score_text)
                     if score_match:
                         score = float(score_match.group(1))
                         score = max(1.0, min(10.0, score))
                     current_section = 'score'
+                    in_detailed_scores = False
+                    
+                elif line.lower().startswith('detailed scores:'):
+                    in_detailed_scores = True
+                    current_section = 'detailed_scores'
+                    
+                elif in_detailed_scores and line.startswith('-'):
+                    # Parse detailed score lines
+                    score_line = line[1:].strip()  # Remove the dash
+                    if 'clarity and writing quality:' in score_line.lower():
+                        match = re.search(r'(\d+(?:\.\d+)?)', score_line)
+                        if match:
+                            detailed_scores.clarity_writing = float(match.group(1))
+                    elif 'technical depth:' in score_line.lower():
+                        match = re.search(r'(\d+(?:\.\d+)?)', score_line)
+                        if match:
+                            detailed_scores.technical_depth = float(match.group(1))
+                    elif 'novelty and originality:' in score_line.lower():
+                        match = re.search(r'(\d+(?:\.\d+)?)', score_line)
+                        if match:
+                            detailed_scores.novelty_originality = float(match.group(1))
+                    elif 'methodology rigor:' in score_line.lower():
+                        match = re.search(r'(\d+(?:\.\d+)?)', score_line)
+                        if match:
+                            detailed_scores.methodology_rigor = float(match.group(1))
+                    elif 'evidence and support:' in score_line.lower():
+                        match = re.search(r'(\d+(?:\.\d+)?)', score_line)
+                        if match:
+                            detailed_scores.evidence_support = float(match.group(1))
                     
                 elif line.lower().startswith('reasoning:'):
+                    in_detailed_scores = False
                     if current_section and current_content:
                         if current_section == 'score':
                             pass  # Already processed
@@ -166,13 +211,14 @@ Please evaluate this section considering the context from previous sections (if 
                     current_content = [reasoning] if reasoning else []
                     
                 elif line.lower().startswith('summary:'):
+                    in_detailed_scores = False
                     if current_section == 'reasoning' and current_content:
                         reasoning = ' '.join(current_content)
                     summary = line.split(':', 1)[1].strip()
                     current_section = 'summary'
                     current_content = [summary] if summary else []
                     
-                elif line and current_section:
+                elif line and current_section and not in_detailed_scores:
                     current_content.append(line)
             
             # Handle final section
@@ -191,7 +237,7 @@ Please evaluate this section considering the context from previous sections (if 
                 if summary and not summary.endswith('.'):
                     summary += '.'
                 
-            return score, reasoning, summary
+            return score, reasoning, summary, detailed_scores
             
         except Exception as e:
-            return 5.0, f"Error parsing response: {str(e)}", ""
+            return 5.0, f"Error parsing response: {str(e)}", "", DetailedScores()

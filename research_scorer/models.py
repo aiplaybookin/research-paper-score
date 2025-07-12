@@ -5,6 +5,16 @@ from typing import List, Optional, Dict, Any
 
 
 @dataclass
+class DetailedScores:
+    """Detailed breakdown of scoring criteria."""
+    clarity_writing: float = 0.0
+    technical_depth: float = 0.0
+    novelty_originality: float = 0.0
+    methodology_rigor: float = 0.0
+    evidence_support: float = 0.0
+
+
+@dataclass
 class ChunkScore:
     """Represents a score for a single text chunk/section."""
     section_name: str
@@ -12,6 +22,7 @@ class ChunkScore:
     score: float
     reasoning: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    detailed_scores: Optional[DetailedScores] = None
 
 
 @dataclass
